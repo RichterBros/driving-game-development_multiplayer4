@@ -1,0 +1,15 @@
+{
+  "name": "multiplayer-driving-game",
+  "version": "1.0.0",
+  "description": "A simple multiplayer 3D driving game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.15.0",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "three": "^0.158.0"
+  }
+}
