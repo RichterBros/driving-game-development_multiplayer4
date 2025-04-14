@@ -7,6 +7,31 @@
         canvas { display: block; }
     </style>
 </head>
+<div id="healthBarContainer">
+    <div id="healthBar"></div>
+  </div>
+  
+  <style>
+    #healthBarContainer {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 200px;
+      height: 20px;
+      background: #444;
+      border: 2px solid #222;
+      border-radius: 5px;
+      overflow: hidden;
+      z-index: 10;
+    }
+  
+    #healthBar {
+      height: 100%;
+      width: 100%;
+      background-color: limegreen;
+      transition: width 0.3s ease, background-color 0.3s ease;
+    }
+  </style>
 <body>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script type="importmap">

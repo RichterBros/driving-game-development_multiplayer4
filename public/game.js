@@ -25,6 +25,21 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
+function updateHealthBar(healthPercent) {
+    const bar = document.getElementById('healthBar');
+    if (!bar) return;
+    
+    bar.style.width = `${healthPercent}%`;
+
+    if (healthPercent > 60) {
+        bar.style.backgroundColor = 'limegreen';
+    } else if (healthPercent > 30) {
+        bar.style.backgroundColor = 'orange';
+    } else {
+        bar.style.backgroundColor = 'red';
+    }
+}
+
 // Orbit Controls
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -119,6 +134,11 @@ function initSocket() {
         console.log('Connected to server with ID:', socket.id);
         myPlayerId = socket.id;
         updatePlayerCount();
+    });
+
+    socket.on('updateHealth', (newHealth) => {
+        console.log('Health updated to:', newHealth);
+        updateHealthBar(newHealth);
     });
 
     socket.on('connect_error', (error) => {
