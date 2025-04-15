@@ -133,6 +133,31 @@ const skidMarkMaterial = new THREE.MeshBasicMaterial({
 // Add skid mark geometry
 const skidMarkGeometry = new THREE.PlaneGeometry(0.5, 0.5);
 
+// Add score display
+const scoreDiv = document.createElement('div');
+scoreDiv.style.position = 'absolute';
+scoreDiv.style.top = '10px';
+scoreDiv.style.left = '10px';
+scoreDiv.style.color = 'white';
+scoreDiv.style.fontFamily = 'Arial';
+scoreDiv.style.fontSize = '20px';
+scoreDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+scoreDiv.style.padding = '10px';
+scoreDiv.style.borderRadius = '5px';
+document.body.appendChild(scoreDiv);
+
+// Add score tracking
+let playerScore = 0;
+let otherPlayerScore = 0;
+
+// Update score display
+function updateScoreDisplay() {
+    scoreDiv.textContent = `Your Score: ${playerScore} | Other Player: ${otherPlayerScore}`;
+}
+
+// Initialize score display
+updateScoreDisplay();
+
 // Update the player count display
 function updatePlayerCount() {
     const otherPlayerCount = Object.keys(otherPlayers).length;
@@ -292,6 +317,36 @@ function initSocket() {
            }, 200);
         } else if (otherPlayers[data.id]) {
             otherPlayers[data.id].health = data.health;
+        }
+    });
+
+    socket.on('scoreUpdate', (scoreData) => {
+        try {
+            // Handle both array and object formats
+            if (Array.isArray(scoreData)) {
+                scoreData.forEach(({ id, score }) => {
+                    if (id === myPlayerId) {
+                        playerScore = score;
+                    } else {
+                        otherPlayerScore = score;
+                    }
+                });
+            } else if (typeof scoreData === 'object') {
+                // Convert object format to array format
+                Object.entries(scoreData).forEach(([id, score]) => {
+                    if (id === myPlayerId) {
+                        playerScore = score;
+                    } else {
+                        otherPlayerScore = score;
+                    }
+                });
+            } else {
+                console.error('Invalid score update format:', scoreData);
+                return;
+            }
+            updateScoreDisplay();
+        } catch (error) {
+            console.error('Error processing score update:', error);
         }
     });
 
@@ -1141,15 +1196,27 @@ function updateControls() {
     
     // Generate skid marks when turning sharply or sliding
     if (speed > 5 && (turningIntensity > 1 || Math.abs(velocity.x) > 2 || Math.abs(velocity.z) > 2)) {
-        // Create skid marks at the back of the car
+        // Create skid marks at both back tires
         const backward = new THREE.Vector3(0, 0, -1);
         const quaternion = new THREE.Quaternion(carRot.x, carRot.y, carRot.z, carRot.w);
         const rotatedBackward = backward.clone().applyQuaternion(quaternion).normalize();
         
-        const skidPosition = {
-            x: carPos.x + rotatedBackward.x * 2,
+        // Calculate positions for both rear tires (offset to left and right)
+        const right = new THREE.Vector3(1, 0, 0);
+        const rotatedRight = right.clone().applyQuaternion(quaternion).normalize();
+        
+        // Left rear tire position
+        const leftSkidPosition = {
+            x: carPos.x + rotatedBackward.x * 2 - rotatedRight.x * 1.5,
             y: carPos.y,
-            z: carPos.z + rotatedBackward.z * 2
+            z: carPos.z + rotatedBackward.z * 2 - rotatedRight.z * 1.5
+        };
+        
+        // Right rear tire position
+        const rightSkidPosition = {
+            x: carPos.x + rotatedBackward.x * 2 + rotatedRight.x * 1.5,
+            y: carPos.y,
+            z: carPos.z + rotatedBackward.z * 2 + rotatedRight.z * 1.5
         };
         
         // Calculate skid mark rotation based on car's movement direction
@@ -1159,7 +1226,9 @@ function updateControls() {
             z: 0
         };
         
-        createSkidMark(skidPosition, skidRotation);
+        // Create skid marks for both tires
+        createSkidMark(leftSkidPosition, skidRotation);
+        createSkidMark(rightSkidPosition, skidRotation);
     }
 }
 
@@ -1433,3 +1502,40 @@ function updateSkidMarks() {
         }
     }
 }
+
+// Add game over display
+const gameOverDiv = document.createElement('div');
+gameOverDiv.style.position = 'absolute';
+gameOverDiv.style.top = '50%';
+gameOverDiv.style.left = '50%';
+gameOverDiv.style.transform = 'translate(-50%, -50%)';
+gameOverDiv.style.color = 'white';
+gameOverDiv.style.fontFamily = 'Arial';
+gameOverDiv.style.fontSize = '48px';
+gameOverDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+gameOverDiv.style.padding = '20px';
+gameOverDiv.style.borderRadius = '10px';
+gameOverDiv.style.display = 'none';
+gameOverDiv.style.textAlign = 'center';
+document.body.appendChild(gameOverDiv);
+
+// Add game over handling
+socket.on('gameOver', (data) => {
+    if (data.winnerId === myPlayerId) {
+        gameOverDiv.textContent = 'You Win!';
+        gameOverDiv.style.color = '#4CAF50';
+    } else {
+        gameOverDiv.textContent = 'Game Over';
+        gameOverDiv.style.color = '#f44336';
+    }
+    gameOverDiv.style.display = 'block';
+    
+    // Reset game after 3 seconds
+    setTimeout(() => {
+        gameOverDiv.style.display = 'none';
+        // Reset scores
+        playerScore = 0;
+        otherPlayerScore = 0;
+        updateScoreDisplay();
+    }, 3000);
+});

@@ -14,7 +14,7 @@ app.use(express.static("public"));
 const players = {};
 const bullets = {};
 const MAX_HEALTH = 100;
-const MAX_SCORE = 3;
+const MAX_SCORE = 5;
 
 const SPAWN_POSITIONS = [
   { x: -10, y: 2, z: 0 },
@@ -25,6 +25,9 @@ const gameState = {
   scores: {},
   playerCount: 0,
 };
+
+// Add score tracking
+const playerScores = new Map();
 
 io.on("connection", (socket) => {
   const playerId = socket.id;
@@ -44,6 +47,9 @@ io.on("connection", (socket) => {
 
   gameState.scores[playerId] = 0;
 
+  // Initialize player scores
+  playerScores.set(playerId, 0);
+
   socket.emit("initialize", {
     id: playerId,
     players: players,
@@ -58,33 +64,33 @@ io.on("connection", (socket) => {
 
   socket.on("updatePosition", (data) => {
     if (players[playerId]) {
-      // Log position updates occasionally to avoid console spam
-      if (Math.random() < 0.05) {
-        console.log(`SERVER: Player ${playerId} moved to:`, {
-          x: data.position.x.toFixed(2),
-          y: data.position.y.toFixed(2),
-          z: data.position.z.toFixed(2),
+        // Log position updates occasionally to avoid console spam
+        // if (Math.random() < 0.05) {
+        //     console.log(`SERVER: Player ${playerId} moved to:`, {
+        //         x: data.position.x.toFixed(2),
+        //         y: data.position.y.toFixed(2),
+        //         z: data.position.z.toFixed(2),
+        //     });
+        // }
+
+        players[playerId].position = data.position;
+        players[playerId].rotation = data.rotation;
+
+        socket.broadcast.emit("playerMoved", {
+            id: playerId,
+            position: data.position,
+            rotation: data.rotation,
         });
-      }
 
-      players[playerId].position = data.position;
-      players[playerId].rotation = data.rotation;
+        // Add a simple debug flag to the data
+        const broadcastData = {
+            id: playerId,
+            position: data.position,
+            rotation: data.rotation,
+            timestamp: Date.now(),
+        };
 
-      socket.broadcast.emit("playerMoved", {
-        id: playerId,
-        position: data.position,
-        rotation: data.rotation,
-      });
-
-      // Add a simple debug flag to the data
-      const broadcastData = {
-        id: playerId,
-        position: data.position,
-        rotation: data.rotation,
-        timestamp: Date.now(),
-      };
-
-      socket.broadcast.emit("playerMoved", broadcastData);
+        socket.broadcast.emit("playerMoved", broadcastData);
     }
   });
 
@@ -108,49 +114,56 @@ io.on("connection", (socket) => {
   });
 
   socket.on("bulletHit", (data) => {
-    const { bulletId, hitPlayerId } = data;
+    const { bulletId, hitPlayerId, attackerId } = data;
     const bullet = bullets[bulletId];
-
-    if (bullet && players[hitPlayerId] && bullet.owner !== hitPlayerId) {
-      delete bullets[bulletId];
-      io.emit("bulletRemoved", bulletId);
-
-      players[hitPlayerId].health -= 25;
-
-      if (players[hitPlayerId].health <= 0) {
-        const shooterId = bullet.owner;
-        players[shooterId].score += 1;
-        gameState.scores[shooterId] = players[shooterId].score;
-
-        if (players[shooterId].score >= MAX_SCORE) {
-          io.emit("gameOver", { winner: shooterId });
-          Object.keys(players).forEach((id) => {
-            players[id].score = 0;
-            gameState.scores[id] = 0;
-          });
-          io.emit("newRound", {
-            message: "New round starting!",
-            scores: gameState.scores,
-          });
-        }
-
-        players[hitPlayerId].health = MAX_HEALTH;
-        const index = players[hitPlayerId].spawnIndex;
-        players[hitPlayerId].position = SPAWN_POSITIONS[index];
-
-        io.emit("playerRespawned", {
-          id: hitPlayerId,
-          position: players[hitPlayerId].position,
-          health: MAX_HEALTH,
+    
+    if (bullet && players[hitPlayerId]) {
+        // Remove the bullet
+        delete bullets[bulletId];
+        io.emit('bulletRemoved', bulletId);
+        
+        // Reduce health
+        players[hitPlayerId].health -= 10;
+        
+        // Emit health update to all clients
+        io.emit('playerHealthUpdate', {
+            id: hitPlayerId,
+            health: players[hitPlayerId].health
         });
-      }
-
-      io.emit("playerHealthUpdate", {
-        id: hitPlayerId,
-        health: players[hitPlayerId].health,
-      });
-
-      io.emit("scoreUpdate", gameState.scores);
+        
+        // Check if player was eliminated
+        if (players[hitPlayerId].health <= 0) {
+            // Award point to the attacker
+            const attackerScore = (playerScores.get(attackerId) || 0) + 1;
+            playerScores.set(attackerId, attackerScore);
+            
+            console.log(`[SCORE] ${attackerId} scored. New score: ${attackerScore}`);
+            
+            // Reset the eliminated player's health
+            players[hitPlayerId].health = MAX_HEALTH;
+            
+            // Convert scores to array format
+            const scoreArray = Array.from(playerScores.entries()).map(([id, score]) => ({
+                id,
+                score
+            }));
+            
+            // Emit score updates to all clients
+            io.emit('scoreUpdate', scoreArray);
+            
+            // Check for game over
+            if (attackerScore >= MAX_SCORE) {
+                io.emit('gameOver', {
+                    winnerId: attackerId
+                });
+            }
+            
+            // Emit health reset
+            io.emit('playerHealthUpdate', {
+                id: hitPlayerId,
+                health: players[hitPlayerId].health
+            });
+        }
     }
   });
 
