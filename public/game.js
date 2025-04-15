@@ -264,6 +264,23 @@ function initSocket() {
             otherPlayers[data.id].health = data.health;
         }
     });
+
+    // Update the socket event handler name to match server
+    socket.on('playerHealthUpdate', (data) => {
+        console.log('Received health update:', data);
+        if (data.id === myPlayerId) {
+            playerHealth = data.health;
+            updateHealthBar();
+            
+            // Add visual feedback when hit
+            document.body.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+            setTimeout(() => {
+                document.body.style.backgroundColor = '';
+            }, 200);
+        } else if (otherPlayers[data.id]) {
+            otherPlayers[data.id].health = data.health;
+        }
+    });
 }
 
 // Create another player's car - simplified version
@@ -888,14 +905,25 @@ function fireBullet() {
     };
     bulletBody.setLinvel(velocity, true);
     
+    // Create unique bullet ID
+    const bulletId = `${myPlayerId}-${Date.now()}`;
+    
     // Store bullet data
     const bullet = {
+        id: bulletId, // Add bullet ID
         mesh: bulletMesh,
         body: bulletBody,
         spawnTime: Date.now()
     };
     
     bullets.push(bullet);
+    
+    // Emit bullet creation event to server
+    socket.emit('createBullet', {
+        id: bulletId,
+        position: spawnPos,
+        velocity: velocity
+    });
     
     // Remove oldest bullet if we've reached the maximum
     if (bullets.length > MAX_BULLETS) {
@@ -1189,12 +1217,14 @@ function checkBulletCollisions() {
             if (dist < 2.5) { // Adjust collision radius
                 console.log('Bullet hit player:', id);
 
+                // Emit bullet hit event to server with correct parameters
                 socket.emit('bulletHit', {
-                    targetId: id,
-                    attackerId: myPlayerId,
-                    damage: 25
+                    bulletId: bullet.id, // Add bullet ID
+                    hitPlayerId: id,
+                    attackerId: myPlayerId
                 });
 
+                // Remove the bullet
                 removeBullet(bullet);
                 break;
             }
