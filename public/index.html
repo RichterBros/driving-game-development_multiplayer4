@@ -1,17 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Driving Game</title>
-    <style>
-        body { margin: 0; }
-        canvas { display: block; }
-    </style>
-</head>
-<div id="healthBarContainer">
-    <div id="healthBar"></div>
-  </div>
-  
+  <title>Driving Game</title>
   <style>
+    body { margin: 0; }
+    canvas { display: block; }
     #healthBarContainer {
       position: fixed;
       bottom: 20px;
@@ -24,26 +17,45 @@
       overflow: hidden;
       z-index: 10;
     }
-  
     #healthBar {
       height: 100%;
       width: 100%;
       background-color: limegreen;
       transition: width 0.3s ease, background-color 0.3s ease;
     }
+    #victoryDiv {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 20px 40px;
+      border-radius: 10px;
+      display: none;
+      z-index: 1000;
+    }
   </style>
+</head>
 <body>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-                "@dimforge/rapier3d-compat": "https://cdn.skypack.dev/@dimforge/rapier3d-compat"
-            }
-        }
-    </script>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script type="module" src="game.js"></script>
+
+  <div id="healthBarContainer">
+    <div id="healthBar"></div>
+  </div>
+
+  <div id="victoryDiv">YOU WIN!!!</div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "@dimforge/rapier3d-compat": "https://cdn.skypack.dev/@dimforge/rapier3d-compat"
+      }
+    }
+  </script>
+  <script type="module" src="game.js"></script>
 </body>
 </html>

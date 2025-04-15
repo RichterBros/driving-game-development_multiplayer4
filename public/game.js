@@ -1509,6 +1509,8 @@ function checkBulletCollisions() {
                     attackerId: bullet.owner
                 });
 
+              
+
                 removeBullet(bullet);
                 break;
             }
