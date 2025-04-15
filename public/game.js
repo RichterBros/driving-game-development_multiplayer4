@@ -74,7 +74,7 @@ let isOrbitMode = false;
 const carProperties = {
     maxSpeed: 30,
     acceleration: 50,
-    turnSpeed: 3.0,
+    turnSpeed: 50,
     brakeForce: 30
 };
 
@@ -98,6 +98,13 @@ playerCountDiv.style.padding = '10px';
 playerCountDiv.style.borderRadius = '5px';
 document.body.appendChild(playerCountDiv);
 
+// Health bar container
+const healthBarContainer = document.getElementById('healthBarContainer');
+const healthBar = document.getElementById('healthBar');
+
+// Player health
+let playerHealth = 100;
+
 // Update the player count display
 function updatePlayerCount() {
     const otherPlayerCount = Object.keys(otherPlayers).length;
@@ -108,6 +115,21 @@ function updatePlayerCount() {
         playerIds: Object.keys(otherPlayers)
     });
     playerCountDiv.textContent = `Players in game: ${totalPlayers}`;
+}
+
+// Update health bar
+function updateHealthBar() {
+    const healthPercentage = Math.max(0, playerHealth);
+    healthBar.style.width = `${healthPercentage}%`;
+    
+    // Change color based on health
+    if (healthPercentage > 50) {
+        healthBar.style.backgroundColor = 'limegreen';
+    } else if (healthPercentage > 25) {
+        healthBar.style.backgroundColor = 'yellow';
+    } else {
+        healthBar.style.backgroundColor = 'red';
+    }
 }
 
 // Initialize socket connection
@@ -224,6 +246,24 @@ function initSocket() {
             updatePlayerCount();
         }
     });
+
+    // Add new socket event handler for health updates
+    socket.on('healthUpdate', (data) => {
+        if (data.id === myPlayerId) {
+            playerHealth = data.health;
+            updateHealthBar();
+            
+            // Add visual feedback when hit
+            if (data.wasHit) {
+                document.body.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+                setTimeout(() => {
+                    document.body.style.backgroundColor = '';
+                }, 200);
+            }
+        } else if (otherPlayers[data.id]) {
+            otherPlayers[data.id].health = data.health;
+        }
+    });
 }
 
 // Create another player's car - simplified version
@@ -316,7 +356,7 @@ function createOtherPlayerCar(playerData) {
             otherPlayers[playerData.id] = {
                 mesh: mesh,
                 body: body,
-                isTemporary: false
+                health: 100 // Keep the health property but remove healthBar
             };
             
             // Add to scene
@@ -504,11 +544,11 @@ function updateCarPhysics() {
 
     if (carControls.a) {
         console.log("A key pressed - applying left turn");
-        body.applyTorqueImpulse({ x: 0, y: 5000.0, z: 0 }, true); // Reduced from 500.0
+        body.applyTorqueImpulse({ x: 0, y: 10000.0, z: 0 }, true); // Reduced from 500.0
     }
     if (carControls.d) {
         console.log("D key pressed - applying right turn");
-        body.applyTorqueImpulse({ x: 0, y: -5000.0, z: 0 }, true); // Reduced from -500.0
+        body.applyTorqueImpulse({ x: 0, y: -10000.0, z: 0 }, true); // Reduced from -500.0
     }
 
     // Apply stabilization torque
