@@ -895,10 +895,11 @@ function fireBullet() {
     
     // Store bullet data
     const bullet = {
-        id: bulletId, // Add bullet ID
+        id: bulletId,
         mesh: bulletMesh,
         body: bulletBody,
-        spawnTime: Date.now()
+        spawnTime: Date.now(),
+        owner: myPlayerId // Add owner information
     };
     
     bullets.push(bullet);
@@ -907,7 +908,8 @@ function fireBullet() {
     socket.emit('createBullet', {
         id: bulletId,
         position: spawnPos,
-        velocity: velocity
+        velocity: velocity,
+        owner: myPlayerId
     });
     
     // Remove oldest bullet if we've reached the maximum
@@ -1194,6 +1196,25 @@ window.addEventListener('beforeunload', () => {
 
 function checkBulletCollisions() {
     bullets.forEach((bullet) => {
+        // Check collision with local player
+        if (car && bullet.mesh) {
+            const dist = bullet.mesh.position.distanceTo(car.position);
+            if (dist < 2.5) { // Adjust collision radius
+                console.log('Bullet hit local player');
+                
+                // Emit bullet hit event to server
+                socket.emit('bulletHit', {
+                    bulletId: bullet.id,
+                    hitPlayerId: myPlayerId,
+                    attackerId: bullet.owner
+                });
+                
+                removeBullet(bullet);
+                return;
+            }
+        }
+        
+        // Check collision with other players
         for (const id in otherPlayers) {
             const other = otherPlayers[id];
             if (!other.mesh || !bullet.mesh) continue;
@@ -1202,14 +1223,13 @@ function checkBulletCollisions() {
             if (dist < 2.5) { // Adjust collision radius
                 console.log('Bullet hit player:', id);
 
-                // Emit bullet hit event to server with correct parameters
+                // Emit bullet hit event to server
                 socket.emit('bulletHit', {
-                    bulletId: bullet.id, // Add bullet ID
+                    bulletId: bullet.id,
                     hitPlayerId: id,
                     attackerId: myPlayerId
                 });
 
-                // Remove the bullet
                 removeBullet(bullet);
                 break;
             }
