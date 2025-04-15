@@ -246,37 +246,22 @@ function initSocket() {
             updatePlayerCount();
         }
     });
+    
+    
 
-    // Add new socket event handler for health updates
-    socket.on('healthUpdate', (data) => {
-        if (data.id === myPlayerId) {
-            playerHealth = data.health;
-            updateHealthBar();
-            
-            // Add visual feedback when hit
-            if (data.wasHit) {
-                document.body.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
-                setTimeout(() => {
-                    document.body.style.backgroundColor = '';
-                }, 200);
-            }
-        } else if (otherPlayers[data.id]) {
-            otherPlayers[data.id].health = data.health;
-        }
-    });
 
-    // Update the socket event handler name to match server
-    socket.on('playerHealthUpdate', (data) => {
+    //Update the socket event handler name to match server
+   socket.on('playerHealthUpdate', (data) => {
         console.log('Received health update:', data);
         if (data.id === myPlayerId) {
             playerHealth = data.health;
-            updateHealthBar();
+           updateHealthBar();
             
             // Add visual feedback when hit
-            document.body.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
-            setTimeout(() => {
-                document.body.style.backgroundColor = '';
-            }, 200);
+           document.body.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+           setTimeout(() => {
+               document.body.style.backgroundColor = '';
+           }, 200);
         } else if (otherPlayers[data.id]) {
             otherPlayers[data.id].health = data.health;
         }
@@ -561,11 +546,11 @@ function updateCarPhysics() {
 
     if (carControls.a) {
         console.log("A key pressed - applying left turn");
-        body.applyTorqueImpulse({ x: 0, y: 10000.0, z: 0 }, true); // Reduced from 500.0
+        body.applyTorqueImpulse({ x: 0, y: 50000.0, z: 0 }, true); // Reduced from 500.0
     }
     if (carControls.d) {
         console.log("D key pressed - applying right turn");
-        body.applyTorqueImpulse({ x: 0, y: -10000.0, z: 0 }, true); // Reduced from -500.0
+        body.applyTorqueImpulse({ x: 0, y: -50000.0, z: 0 }, true); // Reduced from -500.0
     }
 
     // Apply stabilization torque
