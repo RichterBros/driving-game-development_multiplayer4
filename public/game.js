@@ -185,6 +185,25 @@ function updateHealthBar() {
     }
 }
 
+// Add victory message display
+const victoryDiv = document.createElement('div');
+victoryDiv.style.position = 'absolute';
+victoryDiv.style.top = '50%';
+victoryDiv.style.left = '50%';
+victoryDiv.style.transform = 'translate(-50%, -50%)';
+victoryDiv.style.color = 'white';
+victoryDiv.style.fontFamily = 'Arial';
+victoryDiv.style.fontSize = '72px';
+victoryDiv.style.fontWeight = 'bold';
+victoryDiv.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+victoryDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+victoryDiv.style.padding = '20px';
+victoryDiv.style.borderRadius = '10px';
+victoryDiv.style.display = 'none';
+victoryDiv.style.textAlign = 'center';
+victoryDiv.style.zIndex = '1000'; // Ensure it's on top
+document.body.appendChild(victoryDiv);
+
 // Initialize socket connection
 function initSocket() {
     console.log('Initializing socket connection...');
@@ -413,6 +432,32 @@ function initSocket() {
         bulletCooldowns.set(data.id, Date.now() + 500);
     });
     
+    socket.on('gameOver', (data) => {
+        console.log('Game over event received:', data);
+        if (data.winnerId === myPlayerId) {
+            console.log('I won!');
+            victoryDiv.textContent = 'YOU WIN!!!';
+            victoryDiv.style.color = '#4CAF50'; // Green color for victory
+            victoryDiv.style.fontSize = '96px'; // Make it bigger
+            victoryDiv.style.textShadow = '4px 4px 8px rgba(0,0,0,0.8)'; // Enhanced shadow
+        } else {
+            console.log('I lost!');
+            victoryDiv.textContent = 'GAME OVER';
+            victoryDiv.style.color = '#f44336'; // Red color for defeat
+            victoryDiv.style.fontSize = '72px';
+            victoryDiv.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+        }
+        victoryDiv.style.display = 'block';
+        
+        // Reset game after 3 seconds
+        setTimeout(() => {
+            victoryDiv.style.display = 'none';
+            // Reset scores
+            playerScore = 0;
+            otherPlayerScore = 0;
+            updateScoreDisplay();
+        }, 3000);
+    });
 }
 
 // Create another player's car - simplified version
@@ -1502,40 +1547,3 @@ function updateSkidMarks() {
         }
     }
 }
-
-// Add game over display
-const gameOverDiv = document.createElement('div');
-gameOverDiv.style.position = 'absolute';
-gameOverDiv.style.top = '50%';
-gameOverDiv.style.left = '50%';
-gameOverDiv.style.transform = 'translate(-50%, -50%)';
-gameOverDiv.style.color = 'white';
-gameOverDiv.style.fontFamily = 'Arial';
-gameOverDiv.style.fontSize = '48px';
-gameOverDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-gameOverDiv.style.padding = '20px';
-gameOverDiv.style.borderRadius = '10px';
-gameOverDiv.style.display = 'none';
-gameOverDiv.style.textAlign = 'center';
-document.body.appendChild(gameOverDiv);
-
-// Add game over handling
-socket.on('gameOver', (data) => {
-    if (data.winnerId === myPlayerId) {
-        gameOverDiv.textContent = 'You Win!';
-        gameOverDiv.style.color = '#4CAF50';
-    } else {
-        gameOverDiv.textContent = 'Game Over';
-        gameOverDiv.style.color = '#f44336';
-    }
-    gameOverDiv.style.display = 'block';
-    
-    // Reset game after 3 seconds
-    setTimeout(() => {
-        gameOverDiv.style.display = 'none';
-        // Reset scores
-        playerScore = 0;
-        otherPlayerScore = 0;
-        updateScoreDisplay();
-    }, 3000);
-});

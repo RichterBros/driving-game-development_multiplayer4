@@ -14,7 +14,7 @@ app.use(express.static("public"));
 const players = {};
 const bullets = {};
 const MAX_HEALTH = 100;
-const MAX_SCORE = 5;
+const MAX_SCORE = 3;
 
 const SPAWN_POSITIONS = [
   { x: -10, y: 2, z: 0 },
@@ -153,8 +153,10 @@ io.on("connection", (socket) => {
             
             // Check for game over
             if (attackerScore >= MAX_SCORE) {
+                console.log(`[GAME OVER] Player ${attackerId} won with ${attackerScore} points!`);
                 io.emit('gameOver', {
-                    winnerId: attackerId
+                    winnerId: attackerId,
+                    scores: scoreArray
                 });
             }
             
