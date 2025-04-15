@@ -105,6 +105,12 @@ const healthBar = document.getElementById('healthBar');
 // Player health
 let playerHealth = 100;
 
+// Add isReadyToShoot flag near other global variables
+let isReadyToShoot = false;
+
+// Add bullet cooldown tracking
+const bulletCooldowns = new Map(); // Track when bullets can start hitting their owner
+
 // Update the player count display
 function updatePlayerCount() {
     const otherPlayerCount = Object.keys(otherPlayers).length;
@@ -380,6 +386,7 @@ function createOtherPlayerCar(playerData) {
 
 // Set up keyboard controls
 function setupControls() {
+    console.log('[DEBUG] Setting up controls');
     document.addEventListener('keydown', (event) => {
         switch(event.key.toLowerCase()) {
             case 'w':
@@ -434,7 +441,7 @@ function setupControls() {
             case 'f':
                 carControls.f = false;
                 break;
-            case ' ':
+            case ' ': // Spacebar
                 carControls.space = false;
                 break;
         }
@@ -546,11 +553,11 @@ function updateCarPhysics() {
 
     if (carControls.a) {
         console.log("A key pressed - applying left turn");
-        body.applyTorqueImpulse({ x: 0, y: 50000.0, z: 0 }, true); // Reduced from 500.0
+        body.applyTorqueImpulse({ x: 0, y: 50000.0, z: 0 }, true); // Increased from 5000.0
     }
     if (carControls.d) {
         console.log("D key pressed - applying right turn");
-        body.applyTorqueImpulse({ x: 0, y: -50000.0, z: 0 }, true); // Reduced from -500.0
+        body.applyTorqueImpulse({ x: 0, y: -50000.0, z: 0 }, true); // Increased from -5000.0
     }
 
     // Apply stabilization torque
@@ -749,6 +756,7 @@ function loadCar() {
                 physicsWorld.world.createCollider(colliderDesc, body);
                 
                 console.log('Car loaded with physics, handle:', carBodyHandle);
+                isReadyToShoot = true; // Set the flag to true after car is fully loaded
                 resolve();
             },
             (xhr) => {
@@ -838,10 +846,17 @@ function updateCar() {
 
 // Function to create and fire a bullet
 function fireBullet() {
-    if (!car || !carBodyHandle) return;
+    console.log('[DEBUG] fireBullet called');
+    if (!isReadyToShoot || !car || !carBodyHandle) {
+        console.warn('[DEBUG] Cannot fire: not ready to shoot or car/carBodyHandle not ready');
+        return;
+    }
     
     const body = physicsWorld.world.bodies.get(carBodyHandle);
-    if (!body) return;
+    if (!body) {
+        console.warn('[DEBUG] Cannot fire: physics body not found');
+        return;
+    }
 
     // Get car's position and rotation
     const pos = body.translation();
@@ -849,7 +864,11 @@ function fireBullet() {
     
     // Create bullet geometry and material
     const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-    const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const bulletMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff0000,
+        transparent: true,
+        opacity: 1.0
+    });
     const bulletMesh = new THREE.Mesh(bulletGeometry, bulletMaterial);
     
     // Position bullet at the front of the car
@@ -857,11 +876,11 @@ function fireBullet() {
     const quaternion = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
     const rotatedForward = forward.clone().applyQuaternion(quaternion).normalize();
     
-    // Calculate bullet spawn position (slightly in front of the car)
+    // Calculate bullet spawn position (further in front of the car)
     const spawnPos = {
-        x: pos.x + rotatedForward.x * 2,
+        x: pos.x + rotatedForward.x * 5, // Increased from 2 to 5
         y: pos.y + 0.5,
-        z: pos.z + rotatedForward.z * 2
+        z: pos.z + rotatedForward.z * 5  // Increased from 2 to 5
     };
     
     bulletMesh.position.set(spawnPos.x, spawnPos.y, spawnPos.z);
@@ -893,18 +912,21 @@ function fireBullet() {
     // Create unique bullet ID
     const bulletId = `${myPlayerId}-${Date.now()}`;
     
-    // Store bullet data
+    // Store bullet data with owner information
     const bullet = {
         id: bulletId,
         mesh: bulletMesh,
         body: bulletBody,
         spawnTime: Date.now(),
-        owner: myPlayerId // Add owner information
+        owner: myPlayerId
     };
     
     bullets.push(bullet);
     
-    // Emit bullet creation event to server
+    // Set cooldown for self-hit
+    bulletCooldowns.set(bulletId, Date.now() + 500); // 500ms cooldown
+    
+    // Emit bullet creation event to server with owner information
     socket.emit('createBullet', {
         id: bulletId,
         position: spawnPos,
@@ -933,6 +955,9 @@ function removeBullet(bullet) {
     if (index !== -1) {
         bullets.splice(index, 1);
     }
+    
+    // Remove cooldown tracking
+    bulletCooldowns.delete(bullet.id);
 }
 
 // Update bullets in animation loop
@@ -1004,10 +1029,10 @@ function updateControls() {
     const stabilizationTorque = cross.multiplyScalar(100.0);
 
     if (carControls.a) {
-        body.applyTorqueImpulse({ x: 0, y: 5000.0, z: 0 }, true);
+        body.applyTorqueImpulse({ x: 0, y: 50000.0, z: 0 }, true); // Increased from 5000.0
     }
     if (carControls.d) {
-        body.applyTorqueImpulse({ x: 0, y: -5000.0, z: 0 }, true);
+        body.applyTorqueImpulse({ x: 0, y: -50000.0, z: 0 }, true); // Increased from -5000.0
     }
 
     // Apply stabilization torque
@@ -1196,13 +1221,22 @@ window.addEventListener('beforeunload', () => {
 
 function checkBulletCollisions() {
     bullets.forEach((bullet) => {
+        // Check if bullet is still in cooldown for self-hit
+        const cooldownEnd = bulletCooldowns.get(bullet.id);
+        const canHitSelf = !cooldownEnd || Date.now() > cooldownEnd;
+        
         // Check collision with local player
-        if (car && bullet.mesh) {
-            const dist = bullet.mesh.position.distanceTo(car.position);
-            if (dist < 2.5) { // Adjust collision radius
+        if (car && bullet.mesh && (bullet.owner !== myPlayerId || canHitSelf)) {
+            // Get car's bounding box
+            const carBox = new THREE.Box3().setFromObject(car);
+            // Add some padding to the bounding box to make it easier to hit
+            carBox.expandByScalar(1.0);
+            
+            // Check if bullet is inside car's bounding box
+            if (carBox.containsPoint(bullet.mesh.position)) {
                 console.log('Bullet hit local player');
                 
-                // Emit bullet hit event to server
+                // Emit bullet hit event to server with owner information
                 socket.emit('bulletHit', {
                     bulletId: bullet.id,
                     hitPlayerId: myPlayerId,
@@ -1219,15 +1253,20 @@ function checkBulletCollisions() {
             const other = otherPlayers[id];
             if (!other.mesh || !bullet.mesh) continue;
 
-            const dist = bullet.mesh.position.distanceTo(other.mesh.position);
-            if (dist < 2.5) { // Adjust collision radius
+            // Get other player's bounding box
+            const otherBox = new THREE.Box3().setFromObject(other.mesh);
+            // Add some padding to the bounding box
+            otherBox.expandByScalar(1.0);
+            
+            // Check if bullet is inside other player's bounding box
+            if (otherBox.containsPoint(bullet.mesh.position)) {
                 console.log('Bullet hit player:', id);
 
-                // Emit bullet hit event to server
+                // Emit bullet hit event to server with owner information
                 socket.emit('bulletHit', {
                     bulletId: bullet.id,
                     hitPlayerId: id,
-                    attackerId: myPlayerId
+                    attackerId: bullet.owner
                 });
 
                 removeBullet(bullet);
