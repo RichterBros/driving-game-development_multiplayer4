@@ -117,6 +117,22 @@ const MAX_BULLETS = 100; // Maximum number of bullets in the scene
 const BULLET_SPEED = 100.0; // Speed of bullets
 const BULLET_LIFETIME = 3000; // Bullet lifetime in milliseconds
 
+// Add skid mark variables near other global variables
+let skidMarks = []; // Store all skid marks
+const MAX_SKID_MARKS = 100; // Maximum number of skid marks
+const SKID_MARK_LIFETIME = 5000; // How long skid marks last in milliseconds
+
+// Add skid mark material setup
+const skidMarkMaterial = new THREE.MeshBasicMaterial({
+    color: 0x333333,
+    transparent: true,
+    opacity: 0.8,
+    side: THREE.DoubleSide
+});
+
+// Add skid mark geometry
+const skidMarkGeometry = new THREE.PlaneGeometry(0.5, 0.5);
+
 // Update the player count display
 function updatePlayerCount() {
     const otherPlayerCount = Object.keys(otherPlayers).length;
@@ -922,8 +938,8 @@ function fireBullet() {
     }
 
     // Get car's position and rotation
-    const pos = body.translation();
-    const rot = body.rotation();
+    const carPos = body.translation();
+    const carRot = body.rotation();
     
     // Create bullet geometry and material
     const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
@@ -936,14 +952,14 @@ function fireBullet() {
     
     // Position bullet at the front of the car
     const forward = new THREE.Vector3(0, 0, 1);
-    const quaternion = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+    const quaternion = new THREE.Quaternion(carRot.x, carRot.y, carRot.z, carRot.w);
     const rotatedForward = forward.clone().applyQuaternion(quaternion).normalize();
     
     // Calculate bullet spawn position (further in front of the car)
     const spawnPos = {
-        x: pos.x + rotatedForward.x * 5, // Increased from 2 to 5
-        y: pos.y + 0.5,
-        z: pos.z + rotatedForward.z * 5  // Increased from 2 to 5
+        x: carPos.x + rotatedForward.x * 5, // Increased from 2 to 5
+        y: carPos.y + 0.5,
+        z: carPos.z + rotatedForward.z * 5  // Increased from 2 to 5
     };
     
     bulletMesh.position.set(spawnPos.x, spawnPos.y, spawnPos.z);
@@ -1110,6 +1126,41 @@ function updateControls() {
     if (!impulse.equals(new THREE.Vector3(0, 0, 0))) {
         body.applyImpulse({ x: impulse.x, y: impulse.y, z: impulse.z }, true);
     }
+
+    // Get car's position and rotation
+    const carPos = body.translation();
+    const carRot = body.rotation();
+    
+    // Get car's velocity and angular velocity
+    const velocity = body.linvel();
+    const angularVelocity = body.angvel();
+    
+    // Calculate speed and turning intensity
+    const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+    const turningIntensity = Math.abs(angularVelocity.y);
+    
+    // Generate skid marks when turning sharply or sliding
+    if (speed > 5 && (turningIntensity > 1 || Math.abs(velocity.x) > 2 || Math.abs(velocity.z) > 2)) {
+        // Create skid marks at the back of the car
+        const backward = new THREE.Vector3(0, 0, -1);
+        const quaternion = new THREE.Quaternion(carRot.x, carRot.y, carRot.z, carRot.w);
+        const rotatedBackward = backward.clone().applyQuaternion(quaternion).normalize();
+        
+        const skidPosition = {
+            x: carPos.x + rotatedBackward.x * 2,
+            y: carPos.y,
+            z: carPos.z + rotatedBackward.z * 2
+        };
+        
+        // Calculate skid mark rotation based on car's movement direction
+        const skidRotation = {
+            x: Math.PI / 2, // Rotate to lay flat on ground
+            y: Math.atan2(velocity.x, velocity.z), // Align with movement direction
+            z: 0
+        };
+        
+        createSkidMark(skidPosition, skidRotation);
+    }
 }
 
 // Apply forces to the car based on physics
@@ -1265,6 +1316,9 @@ function animate() {
         // 6.5 Check bullet collisions
         checkBulletCollisions();
 
+        // 6. Update skid marks
+        updateSkidMarks();
+
         // 6. Render
         renderer.render(scene, camera);
     } catch (error) {
@@ -1346,4 +1400,36 @@ function checkBulletCollisions() {
             }
         }
     });
+}
+
+function createSkidMark(position, rotation) {
+    const skidMark = new THREE.Mesh(skidMarkGeometry, skidMarkMaterial);
+    skidMark.position.set(position.x, position.y + 0.01, position.z); // Slightly above ground
+    skidMark.rotation.set(rotation.x, rotation.y, rotation.z);
+    skidMark.spawnTime = Date.now();
+    scene.add(skidMark);
+    skidMarks.push(skidMark);
+    
+    // Remove oldest skid mark if we've reached the maximum
+    if (skidMarks.length > MAX_SKID_MARKS) {
+        const oldestSkidMark = skidMarks.shift();
+        scene.remove(oldestSkidMark);
+    }
+}
+
+function updateSkidMarks() {
+    const now = Date.now();
+    for (let i = skidMarks.length - 1; i >= 0; i--) {
+        const skidMark = skidMarks[i];
+        const age = now - skidMark.spawnTime;
+        
+        // Fade out skid marks over time
+        skidMark.material.opacity = 0.8 * (1 - age / SKID_MARK_LIFETIME);
+        
+        // Remove old skid marks
+        if (age > SKID_MARK_LIFETIME) {
+            scene.remove(skidMark);
+            skidMarks.splice(i, 1);
+        }
+    }
 }
