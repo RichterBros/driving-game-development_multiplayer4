@@ -111,6 +111,12 @@ let isReadyToShoot = false;
 // Add bullet cooldown tracking
 const bulletCooldowns = new Map(); // Track when bullets can start hitting their owner
 
+// Add bullets array near other global variables
+let bullets = []; // Store all bullets in the game
+const MAX_BULLETS = 100; // Maximum number of bullets in the scene
+const BULLET_SPEED = 100.0; // Speed of bullets
+const BULLET_LIFETIME = 3000; // Bullet lifetime in milliseconds
+
 // Update the player count display
 function updatePlayerCount() {
     const otherPlayerCount = Object.keys(otherPlayers).length;
@@ -272,6 +278,70 @@ function initSocket() {
             otherPlayers[data.id].health = data.health;
         }
     });
+
+    socket.on('bulletCreated', (data) => {
+        // Ignore our own bullets (we already created them locally)
+        if (data.owner === myPlayerId) {
+            console.log('[DEBUG] Ignoring own bullet:', data.id);
+            return;
+        }
+    
+        console.log('[DEBUG] Bullet created by other player:', data);
+    
+        // Create visual + physics bullet
+        const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+        const bulletMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x00ffff, // Cyan color for other players' bullets
+            transparent: true,
+            opacity: 1.0
+        });
+        const bulletMesh = new THREE.Mesh(bulletGeometry, bulletMaterial);
+        
+        // Ensure bullet is visible
+        bulletMesh.visible = true;
+        bulletMesh.material.needsUpdate = true;
+        
+        bulletMesh.position.set(data.position.x, data.position.y, data.position.z);
+        scene.add(bulletMesh);
+    
+        // Create physics body with increased damping for stability
+        const bulletBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+            .setTranslation(data.position.x, data.position.y, data.position.z)
+            .setLinearDamping(0.1) // Increased damping
+            .setAngularDamping(0.5) // Increased angular damping
+            .setCcdEnabled(true); // Enable continuous collision detection
+    
+        const bulletBody = physicsWorld.world.createRigidBody(bulletBodyDesc);
+        const bulletColliderDesc = RAPIER.ColliderDesc.ball(0.2)
+            .setRestitution(0.2)
+            .setFriction(0.0)
+            .setDensity(0.1);
+        physicsWorld.world.createCollider(bulletColliderDesc, bulletBody);
+    
+        // Apply velocity and log for debugging
+        const velocity = {
+            x: data.velocity.x * 1.2, // Slightly increase velocity to compensate for damping
+            y: data.velocity.y * 1.2,
+            z: data.velocity.z * 1.2
+        };
+        bulletBody.setLinvel(velocity, true);
+        console.log('[DEBUG] Set bullet velocity:', velocity);
+    
+        const bullet = {
+            id: data.id,
+            mesh: bulletMesh,
+            body: bulletBody,
+            spawnTime: Date.now(),
+            owner: data.owner
+        };
+    
+        bullets.push(bullet);
+        console.log('[DEBUG] Added bullet to array, total bullets:', bullets.length);
+        
+        // Set cooldown for self-hit
+        bulletCooldowns.set(data.id, Date.now() + 500);
+    });
+    
 }
 
 // Create another player's car - simplified version
@@ -542,7 +612,7 @@ function updateCarPhysics() {
     }
     if (carControls.s) {
         console.log("S key pressed - applying backward impulse");
-        impulse.add(rotatedForward.clone().multiplyScalar(-5000.0)); // Increased from -500.0
+        impulse.add(rotatedForward.clone().multiplyScalar(-8000.0)); // Increased from -500.0
     }
 
     // Apply stabilizing torque to keep car upright
@@ -811,13 +881,6 @@ function createPhysicsSphere(color = 0xff0000, position = { x: 0, y: 20, z: 0 })
     };
 }
 
-// Start the game
-let spheres = [];
-let bullets = []; // Add this near the top with other global variables
-const MAX_BULLETS = 100; // Maximum number of bullets in the scene
-const BULLET_SPEED = 100.0; // Speed of bullets
-const BULLET_LIFETIME = 3000; // Bullet lifetime in milliseconds
-
 // Safe wrapper to remove rigid bodies
 function safeRemoveRigidBody(handle) {
     physicsWorld.removeRigidBody(handle);
@@ -927,12 +990,14 @@ function fireBullet() {
     bulletCooldowns.set(bulletId, Date.now() + 500); // 500ms cooldown
     
     // Emit bullet creation event to server with owner information
-    socket.emit('createBullet', {
+    const bulletData = {
         id: bulletId,
         position: spawnPos,
         velocity: velocity,
         owner: myPlayerId
-    });
+    };
+    console.log('[DEBUG] Emitting createBullet:', bulletData);
+    socket.emit('createBullet', bulletData);
     
     // Remove oldest bullet if we've reached the maximum
     if (bullets.length > MAX_BULLETS) {
@@ -1149,14 +1214,21 @@ function updateMeshPositionsFromPhysics() {
             const pos = bullet.body.translation();
             const rot = bullet.body.rotation();
             
+            // Update mesh position and rotation
             bullet.mesh.position.set(pos.x, pos.y, pos.z);
             bullet.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
             
+            // Ensure bullet is visible
+            bullet.mesh.visible = true;
+            bullet.mesh.material.needsUpdate = true;
+            
+            // Remove bullet if it's too old or out of bounds
             const now = Date.now();
             if (now - bullet.spawnTime > BULLET_LIFETIME || 
                 Math.abs(pos.x) > 1000 || 
                 Math.abs(pos.y) > 1000 || 
                 Math.abs(pos.z) > 1000) {
+                console.log('[DEBUG] Removing bullet:', bullet.id);
                 removeBullet(bullet);
             }
         }
